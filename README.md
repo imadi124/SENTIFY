@@ -34,6 +34,16 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## UI Preview
+
+### CSV Review Analysis
+
+![CSV Analysis Screen](image1.png)
+
+### Play Store Review Analysis
+
+![Play Store Analysis Screen](image2.png)
+
 ## Input format
 
 - CSV with at least one column containing review text

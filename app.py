@@ -226,8 +226,7 @@ with tab_csv:
 with tab_play:
     st.subheader("Fetch reviews from Google Play Store")
     st.info(
-        "📊 **Balanced Sampling**: Reviews are fetched across all star ratings (1-5) "
-        "to ensure representative sentiment distribution, not just recent reviews."
+        "**Balanced Sampling**: Reviews are fetched across all star ratings (1-5)"
     )
     app_id = st.text_input("Play Store App ID", value="com.whatsapp")
     total_reviews = st.number_input(
@@ -308,3 +307,6 @@ with tab_play:
         analyze_progress.progress(100, text="Analyzing Play Store reviews... done")
 
         render_summary(analyzed_play_df, "review_text", "playstore", show_rating=True)
+
+st.divider()
+st.markdown("Made with ❣️ by **Abhay Aditya** and **Nimisha Shukla**")
