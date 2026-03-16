@@ -1,8 +1,15 @@
 import pandas as pd
 import streamlit as st
 import math
-from google_play_scraper import Sort, reviews
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+try:
+    from google_play_scraper import Sort, reviews
+    PLAYSTORE_IMPORT_ERROR = None
+except ModuleNotFoundError as exc:
+    Sort = None
+    reviews = None
+    PLAYSTORE_IMPORT_ERROR = str(exc)
 
 
 def label_sentiment(compound_score: float) -> str:
@@ -103,6 +110,12 @@ def fetch_playstore_reviews(
     Fetch reviews with stratified sampling across all 5 star ratings (1-5).
     This ensures balanced representation of negative, neutral, and positive reviews.
     """
+    if reviews is None or Sort is None:
+        raise RuntimeError(
+            "Play Store review fetching requires the 'google-play-scraper' package. "
+            "Install dependencies with: pip install -r requirements.txt"
+        )
+
     all_reviews = []
     star_ratings = [1, 2, 3, 4, 5]
     base_target = total_reviews // len(star_ratings)
@@ -114,11 +127,11 @@ def fetch_playstore_reviews(
     total_batches = len(star_ratings)
 
     for batch_number, star_rating in enumerate(star_ratings, start=1):
+        star_reviews = []
+        continuation_token = None
+        star_target = target_per_star[star_rating]
+
         try:
-            star_reviews = []
-            continuation_token = None
-            star_target = target_per_star[star_rating]
-            
             # Fetch multiple batches for this star rating if needed
             while len(star_reviews) < star_target:
                 fetch_count = min(batch_size, star_target - len(star_reviews))
@@ -134,31 +147,30 @@ def fetch_playstore_reviews(
 
                 if not result:
                     break
-                
+
                 star_reviews.extend(result)
 
                 if len(star_reviews) > star_target:
                     star_reviews = star_reviews[:star_target]
-                
+
                 if continuation_token is None:
                     break
-            
-            all_reviews.extend(star_reviews[:star_target])
-
-            if len(all_reviews) > total_reviews:
-                all_reviews = all_reviews[:total_reviews]
-
-            fetched_count = len(all_reviews)
-            if progress_callback is not None:
-                progress_callback(
-                    batch_number,
-                    total_batches,
-                    fetched_count,
-                    total_reviews,
-                )
         except Exception:
-            # If a specific star rating has no reviews, continue with others
-            continue
+            star_reviews = []
+
+        all_reviews.extend(star_reviews[:star_target])
+
+        if len(all_reviews) > total_reviews:
+            all_reviews = all_reviews[:total_reviews]
+
+        fetched_count = len(all_reviews)
+        if progress_callback is not None:
+            progress_callback(
+                batch_number,
+                total_batches,
+                fetched_count,
+                total_reviews,
+            )
 
     if not all_reviews:
         return pd.DataFrame(columns=["review_text", "rating"])
@@ -177,9 +189,26 @@ st.write("Analyze reviews from a CSV file or fetch them directly from Google Pla
 tab_csv, tab_play = st.tabs(["Upload CSV", "Play Store App Reviews"])
 
 with tab_csv:
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    MAX_CSV_SIZE_MB = 80
+
+    uploaded_file = st.file_uploader(
+        "Upload CSV",
+        type=["csv"],
+        help=f"Maximum file size: {MAX_CSV_SIZE_MB} MB. Larger files will be rejected.",
+    )
 
     if uploaded_file is not None:
+        file_size_mb = uploaded_file.size / (1024 * 1024)
+
+        if file_size_mb > MAX_CSV_SIZE_MB:
+            st.error(
+                f"**File too large!**\n\n"
+                f"Your file is **{file_size_mb:.1f} MB** — "
+                f"the maximum allowed size is **{MAX_CSV_SIZE_MB} MB**.\n\n"
+                "Try splitting the file into smaller parts or removing unnecessary columns."
+            )
+            st.stop()
+
         try:
             df = pd.read_csv(uploaded_file)
         except Exception as exc:
@@ -228,7 +257,16 @@ with tab_play:
     st.info(
         "**Balanced Sampling**: Reviews are fetched across all star ratings (1-5)"
     )
+
+    if PLAYSTORE_IMPORT_ERROR is not None:
+        st.error(
+            "Play Store fetching is currently unavailable because the required package "
+            "is not installed in this Python environment: "
+            f"{PLAYSTORE_IMPORT_ERROR}. Install dependencies with: pip install -r requirements.txt"
+        )
+
     app_id = st.text_input("Play Store App ID", value="com.whatsapp")
+
     total_reviews = st.number_input(
         "How many reviews to fetch",
         min_value=50,
