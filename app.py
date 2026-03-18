@@ -11,6 +11,29 @@ except ModuleNotFoundError as exc:
     reviews = None
     PLAYSTORE_IMPORT_ERROR = str(exc)
 
+import re
+
+APP_ID_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$")
+
+
+def sanitize_and_validate_app_id(raw_app_id: str) -> str | None:
+    """
+    Validate and sanitize Play Store app ID input.
+    Valid format: starts with letter, contains dots, only letters/numbers/underscores.
+    Example: com.whatsapp, com.facebook.katana
+    """
+    app_id = raw_app_id.strip()
+    
+    # Check for empty or too long
+    if not app_id or len(app_id) > 255:
+        return None
+    
+    # Check format matches pattern
+    if not APP_ID_PATTERN.fullmatch(app_id):
+        return None
+    
+    return app_id
+
 
 def label_sentiment(compound_score: float) -> str:
     if compound_score >= 0.05:
@@ -290,8 +313,18 @@ with tab_play:
     )
 
     if st.button("Fetch & Analyze Play Store Reviews"):
-        if not app_id.strip():
-            st.error("Please enter a valid Play Store App ID.")
+        validated_app_id = sanitize_and_validate_app_id(app_id)
+        if not validated_app_id:
+            st.error(
+                "❌ Invalid Play Store App ID format.\n\n"
+                "**Expected format**: `com.package.name`\n\n"
+                "**Examples**: `com.whatsapp`, `com.facebook.katana`, `com.instagram.android`\n\n"
+                "App IDs must:\n"
+                "- Start with a letter\n"
+                "- Contain at least one dot (.) to separate package levels\n"
+                "- Use only letters, numbers, and underscores\n"
+                "- Be no longer than 255 characters"
+            )
             st.stop()
 
         try:
@@ -308,7 +341,7 @@ with tab_play:
                 )
 
             play_df = fetch_playstore_reviews(
-                app_id=app_id.strip(),
+                app_id=validated_app_id,
                 total_reviews=int(total_reviews),
                 batch_size=int(fetch_batch_size),
                 progress_callback=update_fetch_progress,
